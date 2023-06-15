@@ -3,9 +3,11 @@ import uuid
 import boto3
 from django.shortcuts import render, redirect
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
-
+from django.contrib.auth import login
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from .models import Dog, Photo
-
 from .forms import FeedingForm
 
 
@@ -17,13 +19,14 @@ def home(request):
 def about(request):
   return render(request, 'about.html')
 
+@login_required
 def dogs_index(request):
-  dogs = Dog.objects.all()
-  # We pass data to a template very much like we did in Express!
+  dogs = Dog.objects.filter(user=request.user)  # We pass data to a template very much like we did in Express!
   return render(request, 'dogs/index.html', {
     'dogs': dogs
   })
 
+@login_required
 def dogs_detail(request, dog_id):
   dog = Dog.objects.get(id=dog_id)
   feeding_form = FeedingForm()
@@ -32,19 +35,27 @@ def dogs_detail(request, dog_id):
   
   })
 
-class DogCreate(CreateView):
+class DogCreate(LoginRequiredMixin, CreateView):
   model = Dog
-  fields = '__all__'
+  fields = ['name', 'breed', 'description', 'age']
 
-class DogUpdate(UpdateView):
+  def form_valid(self, form):
+    # Assign the logged in user (self.request.user)
+    form.instance.user = self.request.user  # form.instance is the cat
+    # Let the CreateView do its job as usual
+    return super().form_valid(form)
+
+class DogUpdate(LoginRequiredMixin,UpdateView):
   model = Dog
   # Let's disallow the renaming of a cat by excluding the name field!
   fields = ['breed', 'description', 'age']
 
-class DogDelete(DeleteView):
+
+class DogDelete(LoginRequiredMixin, DeleteView):
   model = Dog
   success_url = '/dogs'
 
+@login_required
 def add_feeding(request, dog_id):
   # Baby step
   form = FeedingForm(request.POST)
@@ -54,6 +65,7 @@ def add_feeding(request, dog_id):
     new_feeding.save()
   return redirect('detail', dog_id=dog_id)
 
+@login_required
 def add_photo(request, dog_id):
     # photo-file will be the "name" attribute on the <input type="file">
     photo_file = request.FILES.get('photo-file', None)
@@ -73,3 +85,22 @@ def add_photo(request, dog_id):
             print('An error occurred uploading file to S3')
             print(e)
     return redirect('detail', dog_id=dog_id)
+
+def signup(request):
+  error_message = ''
+  if request.method == 'POST':
+    # This is how to create a 'user' form object
+    # that includes the data from the browser
+    form = UserCreationForm(request.POST)
+    if form.is_valid():
+      # This will add the user to the database
+      user = form.save()
+      # This is how we log a user in via code
+      login(request, user)
+      return redirect('index')
+    else:
+      error_message = 'Invalid sign up - try again'
+  # A bad POST or a GET request, so render signup.html with an empty form
+  form = UserCreationForm()
+  context = {'form': form, 'error_message': error_message}
+  return render(request, 'registration/signup.html', context)

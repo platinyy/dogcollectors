@@ -1,7 +1,7 @@
 from django.db import models
 from django.urls import reverse
 from datetime import date
-
+from django.contrib.auth.models import User
 # Create your models here.
 MEALS = (
     ('B', 'Breakfast'),
@@ -14,6 +14,7 @@ class Dog(models.Model):
     breed = models.CharField(max_length=100)
     description = models.TextField(max_length=250)
     age = models.IntegerField()
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
 
     def fed_for_today(self):
       return self.feeding_set.filter(date=date.today()).count() >= len(MEALS)
